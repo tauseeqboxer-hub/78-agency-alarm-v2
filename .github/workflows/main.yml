@@ -1,0 +1,95 @@
+name: Build 78 Agency Alarm APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Configure Logo, Loud Tun-Tun Alarm & Build APK
+        run: |
+          if [ -f "78_agency_alarm_flutter/pubspec.yaml" ]; then
+            cd 78_agency_alarm_flutter
+          fi
+
+          flutter create . --platforms=android --org com.agency78
+
+          mkdir -p android/app/src/main/res/raw
+          if [ -f "assets/tun_tun_alarm.wav" ]; then
+            cp assets/tun_tun_alarm.wav android/app/src/main/res/raw/tun_tun_alarm.wav
+          fi
+
+          if [ -f "assets/logo.png" ]; then
+            for d in android/app/src/main/res/mipmap-*; do
+              cp assets/logo.png "$d/ic_launcher.png"
+            done
+          fi
+
+          python3 - << 'PATCH'
+          import os, re
+          mp = "android/app/src/main/AndroidManifest.xml"
+          m = open(mp, encoding="utf-8").read()
+          m = re.sub(r'android:label="[^"]*"', 'android:label="78 Agency Alarm"', m, count=1)
+          if "showWhenLocked" not in m:
+              m = m.replace("<activity", '<activity android:showWhenLocked="true" android:turnScreenOn="true"', 1)
+          perms = (
+              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
+              '    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
+              '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\n'
+              '    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>\n'
+              '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n'
+              '    <uses-permission android:name="android.permission.VIBRATE"/>\n'
+              '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
+              '    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>\n'
+          )
+          if "SCHEDULE_EXACT_ALARM" not in m:
+              m = m.replace("<application", perms + "\n    <application", 1)
+          recvs = (
+              '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />\n'
+              '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n'
+              '            <intent-filter>\n'
+              '                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n'
+              '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n'
+              '                <action android:name="android.intent.action.QUICKBOOT_POWERON" />\n'
+              '                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>\n'
+              '            </intent-filter>\n'
+              '        </receiver>\n'
+          )
+          if "ScheduledNotificationReceiver" not in m:
+              m = m.replace("</application>", recvs + "\n    </application>", 1)
+          open(mp, "w", encoding="utf-8").write(m)
+
+          for gp in ["android/app/build.gradle.kts", "android/app/build.gradle"]:
+              if os.path.exists(gp):
+                  g = open(gp, encoding="utf-8").read()
+                  if "coreLibraryDesugaring" not in g:
+                      if gp.endswith(".kts"):
+                          g = g.replace("compileOptions {", "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
+                          dep = '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n'
+                      else:
+                          g = g.replace("compileOptions {", "compileOptions {\n        coreLibraryDesugaringEnabled true", 1)
+                          dep = "    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n"
+                      g = g.replace("dependencies {", "dependencies {\n" + dep, 1) if "dependencies {" in g else g + "\ndependencies {\n" + dep + "}\n"
+                  open(gp, "w", encoding="utf-8").write(g)
+          PATCH
+
+          flutter pub get
+          flutter build apk --release
+
+      - name: Upload 78 Agency Alarm APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 78-Agency-Alarm-APK
+          path: "**/app-release.apk"
