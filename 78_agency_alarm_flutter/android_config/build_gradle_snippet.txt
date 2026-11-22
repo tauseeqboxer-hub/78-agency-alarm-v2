@@ -1,0 +1,18 @@
+// In android/app/build.gradle (or build.gradle.kts), make sure:
+// 1) compileSdk = 34 (or higher)
+// 2) coreLibraryDesugaringEnabled = true inside compileOptions
+// 3) Add desugaring dependency inside dependencies { ... }:
+
+android {
+    compileSdk = 34
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
