@@ -18,7 +18,7 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Configure Logo, Loud Tun-Tun Alarm & Build APK
+      - name: Fix R8 Notification Bug, Logo, Loud Alarm & Build APK
         run: |
           if [ -f "78_agency_alarm_flutter/pubspec.yaml" ]; then
             cd 78_agency_alarm_flutter
@@ -30,6 +30,7 @@ jobs:
           if [ -f "assets/tun_tun_alarm.wav" ]; then
             cp assets/tun_tun_alarm.wav android/app/src/main/res/raw/tun_tun_alarm.wav
           fi
+          python3 -c 'open("android/app/src/main/res/raw/keep.xml","w").write("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources xmlns:tools=\"http://schemas.android.com/tools\" tools:keep=\"@raw/tun_tun_alarm\" />\n")'
 
           if [ -f "assets/logo.png" ]; then
             for d in android/app/src/main/res/mipmap-*; do
@@ -82,7 +83,19 @@ jobs:
                           g = g.replace("compileOptions {", "compileOptions {\n        coreLibraryDesugaringEnabled true", 1)
                           dep = "    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'\n"
                       g = g.replace("dependencies {", "dependencies {\n" + dep, 1) if "dependencies {" in g else g + "\ndependencies {\n" + dep + "}\n"
+                  if "isMinifyEnabled" not in g and "minifyEnabled" not in g:
+                      if gp.endswith(".kts"):
+                          g = g.replace('getByName("release") {', 'getByName("release") {\n            isMinifyEnabled = false\n            isShrinkResources = false', 1)
+                          g = g.replace('release {', 'release {\n            isMinifyEnabled = false\n            isShrinkResources = false', 1)
+                      else:
+                          g = g.replace('release {', 'release {\n            minifyEnabled false\n            shrinkResources false', 1)
                   open(gp, "w", encoding="utf-8").write(g)
+
+          ap = "lib/services/alarm_service.dart"
+          if os.path.exists(ap):
+              a = open(ap, encoding="utf-8").read()
+              a = a.replace("agency_78_loud_alarm_v2", "agency_78_loud_alarm_v3")
+              open(ap, "w", encoding="utf-8").write(a)
           PATCH
 
           flutter pub get
